@@ -26,10 +26,10 @@ const mockDetectionResults = [
     confidence: 87,
     severity: 'High',
     recommendations: [
-      'Isolate the animal immediately',
+      'Isolate the cattle immediately',
       'Contact veterinarian for treatment',
       'Disinfect the area thoroughly',
-      'Monitor other animals for symptoms'
+      'Monitor other cattle for symptoms'
     ]
   },
   {

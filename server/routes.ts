@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertUserSchema, insertCattleSchema, insertHealthRecordSchema,
   insertVaccinationSchema, insertFeedingRecordSchema, insertFeedInventorySchema,
-  insertDiseaseDetectionSchema, insertSalesTransactionSchema, insertAlertSchema
+  insertDiseaseDetectionSchema, insertSalesTransactionSchema, insertAlertSchema,
+  insertCattleGroupSchema, insertInventoryItemSchema, insertFeedPlanSchema
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -86,34 +87,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, role } = req.body;
       
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
+      // Development mode - allow test users without database
+      if (process.env.NODE_ENV === 'development') {
+        // Test users for development
+        const testUsers = [
+          { id: '1', name: 'Test Farmer', email: 'farmer@test.com', role: 'farmer', password: 'test123' },
+          { id: '2', name: 'Test Vet', email: 'vet@test.com', role: 'veterinarian', password: 'test123' },
+          { id: '3', name: 'Test Buyer', email: 'buyer@test.com', role: 'buyer', password: 'test123' },
+          { id: '4', name: 'Test Admin', email: 'admin@test.com', role: 'admin', password: 'test123' },
+        ];
 
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
+        const testUser = testUsers.find(u => u.email === email && u.password === password && u.role === role);
+        if (testUser) {
+          const token = jwt.sign(
+            { userId: testUser.id, email: testUser.email, role: testUser.role },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+          );
 
-      const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '24h' }
-      );
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          avatar: user.avatar
+          return res.json({
+            token,
+            user: {
+              id: testUser.id,
+              name: testUser.name,
+              email: testUser.email,
+              role: testUser.role,
+              avatar: null
+            }
+          });
         }
-      });
+      }
+      
+      // Production mode - use database
+      try {
+        const user = await storage.getUserByEmail(email);
+        if (!user) {
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) {
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign(
+          { userId: user.id, email: user.email, role: user.role },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            avatar: user.avatar
+          }
+        });
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
     } catch (error) {
       console.error('Login error:', error);
       res.status(400).json({ error: 'Login failed' });
@@ -123,6 +161,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User profile routes
   app.get("/api/users/profile", authenticateToken, async (req: any, res) => {
     try {
+      // Development mode - return mock user data
+      if (process.env.NODE_ENV === 'development') {
+        const testUsers = [
+          { id: '1', name: 'Test Farmer', email: 'farmer@test.com', role: 'farmer' },
+          { id: '2', name: 'Test Vet', email: 'vet@test.com', role: 'veterinarian' },
+          { id: '3', name: 'Test Buyer', email: 'buyer@test.com', role: 'buyer' },
+          { id: '4', name: 'Test Admin', email: 'admin@test.com', role: 'admin' },
+        ];
+
+        const testUser = testUsers.find(u => u.id === req.user.userId);
+        if (testUser) {
+          return res.json({
+            id: testUser.id,
+            name: testUser.name,
+            email: testUser.email,
+            role: testUser.role,
+            avatar: null
+          });
+        }
+      }
+
+      // Production mode - use database
       const user = await storage.getUser(req.user.userId);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
@@ -460,6 +520,374 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Dashboard summary fetch error:', error);
       res.status(500).json({ error: 'Failed to fetch dashboard summary' });
+    }
+  });
+
+  // ==================== FEED PLAN & INVENTORY MANAGEMENT ROUTES ====================
+  
+  // Get all cattle groups
+  app.get("/api/cattle-groups", authenticateToken, async (req: any, res) => {
+    try {
+      const groups = await storage.getCattleGroups(req.user.userId);
+      res.json(groups);
+    } catch (error) {
+      console.error('Cattle groups fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch cattle groups' });
+    }
+  });
+
+  // Create cattle group
+  app.post("/api/cattle-groups", authenticateToken, async (req: any, res) => {
+    try {
+      const groupData = { ...req.body, ownerId: req.user.userId };
+      const newGroup = await storage.createCattleGroup(groupData);
+      res.status(201).json(newGroup);
+    } catch (error) {
+      console.error('Cattle group creation error:', error);
+      res.status(500).json({ error: 'Failed to create cattle group' });
+    }
+  });
+
+  // Get all inventory items
+  app.get("/api/inventory", authenticateToken, async (req: any, res) => {
+    try {
+      const items = await storage.getInventoryItems(req.user.userId);
+      res.json(items);
+    } catch (error) {
+      console.error('Inventory fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch inventory items' });
+    }
+  });
+
+  // Create inventory item
+  app.post("/api/inventory", authenticateToken, async (req: any, res) => {
+    try {
+      const itemData = { 
+        ...req.body, 
+        ownerId: req.user.userId,
+        availableQuantity: req.body.totalQuantity,
+        lockedQuantity: '0'
+      };
+      const newItem = await storage.createInventoryItem(itemData);
+      res.status(201).json(newItem);
+    } catch (error) {
+      console.error('Inventory item creation error:', error);
+      res.status(500).json({ error: 'Failed to create inventory item' });
+    }
+  });
+
+  // Update inventory item
+  app.put("/api/inventory/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const updated = await storage.updateInventoryItem(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error('Inventory update error:', error);
+      res.status(500).json({ error: 'Failed to update inventory item' });
+    }
+  });
+
+  // Get all feed plans
+  app.get("/api/feed-plans", authenticateToken, async (req: any, res) => {
+    try {
+      const plans = await storage.getFeedPlans(req.user.userId);
+      res.json(plans);
+    } catch (error) {
+      console.error('Feed plans fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch feed plans' });
+    }
+  });
+
+  // Get single feed plan with details
+  app.get("/api/feed-plans/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const plan = await storage.getFeedPlanDetails(req.params.id);
+      res.json(plan);
+    } catch (error) {
+      console.error('Feed plan fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch feed plan details' });
+    }
+  });
+
+  // Create feed plan with inventory locking
+  app.post("/api/feed-plans", authenticateToken, async (req: any, res) => {
+    try {
+      const { 
+        name, 
+        cattleGroupId, 
+        cattleId, 
+        startDate, 
+        endDate, 
+        dailyRationPerAnimal,
+        totalAnimals,
+        ingredients, // Array of { inventoryItemId, percentage }
+        notes 
+      } = req.body;
+
+      // Validate ingredients total to 100%
+      const totalPercentage = ingredients.reduce((sum: number, ing: any) => sum + parseFloat(ing.percentage), 0);
+      if (Math.abs(totalPercentage - 100) > 0.01) {
+        return res.status(400).json({ error: 'Ingredient percentages must total 100%' });
+      }
+
+      // Calculate duration in days
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // Calculate total requirements per ingredient
+      const totalDailyRation = parseFloat(dailyRationPerAnimal) * totalAnimals;
+      const totalPlanRation = totalDailyRation * durationDays;
+
+      const ingredientsWithRequirements = await Promise.all(
+        ingredients.map(async (ing: any) => {
+          const required = (totalPlanRation * parseFloat(ing.percentage)) / 100;
+          const item = await storage.getInventoryItem(ing.inventoryItemId);
+          
+          if (!item) {
+            throw new Error(`Inventory item ${ing.inventoryItemId} not found`);
+          }
+
+          const available = parseFloat(item.availableQuantity);
+          if (available < required) {
+            throw new Error(`Insufficient inventory for ${item.name}. Required: ${required}${item.unit}, Available: ${available}${item.unit}`);
+          }
+
+          return {
+            inventoryItemId: ing.inventoryItemId,
+            percentage: ing.percentage,
+            totalRequired: required.toString(),
+            consumed: '0'
+          };
+        })
+      );
+
+      // Create feed plan
+      const feedPlan = await storage.createFeedPlan({
+        name,
+        cattleGroupId: cattleGroupId || null,
+        cattleId: cattleId || null,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        dailyRationPerAnimal: dailyRationPerAnimal.toString(),
+        totalAnimals,
+        status: 'active',
+        notes,
+        ownerId: req.user.userId
+      });
+
+      // Create feed plan ingredients and lock inventory
+      await Promise.all(
+        ingredientsWithRequirements.map(async (ing) => {
+          // Create ingredient record
+          await storage.createFeedPlanIngredient({
+            feedPlanId: feedPlan.id,
+            ...ing
+          });
+
+          // Lock inventory
+          await storage.lockInventory({
+            inventoryItemId: ing.inventoryItemId,
+            feedPlanId: feedPlan.id,
+            lockedQuantity: ing.totalRequired,
+            remainingQuantity: ing.totalRequired,
+            status: 'locked'
+          });
+
+          // Update inventory available quantity
+          await storage.updateInventoryLock(ing.inventoryItemId, parseFloat(ing.totalRequired));
+        })
+      );
+
+      // Create alert for plan creation
+      await storage.createAlert({
+        userId: req.user.userId,
+        type: 'info',
+        title: 'Feed Plan Created',
+        description: `Feed plan "${name}" has been created successfully for ${totalAnimals} animals.`,
+        isRead: false,
+        actionRequired: false
+      });
+
+      res.status(201).json(feedPlan);
+    } catch (error: any) {
+      console.error('Feed plan creation error:', error);
+      res.status(400).json({ error: error.message || 'Failed to create feed plan' });
+    }
+  });
+
+  // Cancel feed plan (unlock inventory)
+  app.post("/api/feed-plans/:id/cancel", authenticateToken, async (req: any, res) => {
+    try {
+      const planId = req.params.id;
+      
+      // Get plan details
+      const plan = await storage.getFeedPlanDetails(planId);
+      if (!plan) {
+        return res.status(404).json({ error: 'Feed plan not found' });
+      }
+
+      if (plan.status !== 'active') {
+        return res.status(400).json({ error: 'Only active plans can be cancelled' });
+      }
+
+      // Release all inventory locks
+      const locks = await storage.getInventoryLocksByPlan(planId);
+      await Promise.all(
+        locks.map(async (lock) => {
+          await storage.releaseInventoryLock(lock.id);
+          await storage.updateInventoryUnlock(lock.inventoryItemId, parseFloat(lock.remainingQuantity));
+        })
+      );
+
+      // Update plan status
+      await storage.updateFeedPlanStatus(planId, 'cancelled');
+
+      // Create alert
+      await storage.createAlert({
+        userId: req.user.userId,
+        type: 'warning',
+        title: 'Feed Plan Cancelled',
+        description: `Feed plan "${plan.name}" has been cancelled and inventory unlocked.`,
+        isRead: false,
+        actionRequired: false
+      });
+
+      res.json({ message: 'Feed plan cancelled successfully' });
+    } catch (error) {
+      console.error('Feed plan cancellation error:', error);
+      res.status(500).json({ error: 'Failed to cancel feed plan' });
+    }
+  });
+
+  // Execute daily feed deduction (can be called by cron job)
+  app.post("/api/feed-plans/execute-daily", authenticateToken, async (req: any, res) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Get all active plans
+      const activePlans = await storage.getActiveFeedPlans();
+
+      const results = await Promise.all(
+        activePlans.map(async (plan) => {
+          try {
+            // Check if plan should be active today
+            const startDate = new Date(plan.startDate);
+            const endDate = new Date(plan.endDate);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(0, 0, 0, 0);
+
+            if (today < startDate || today > endDate) {
+              return { planId: plan.id, status: 'skipped', reason: 'Not in date range' };
+            }
+
+            // Check if already executed today
+            const alreadyExecuted = await storage.checkExecutionToday(plan.id, today);
+            if (alreadyExecuted) {
+              return { planId: plan.id, status: 'skipped', reason: 'Already executed today' };
+            }
+
+            // Calculate daily deduction
+            const dailyTotal = parseFloat(plan.dailyRationPerAnimal) * plan.totalAnimals;
+            
+            // Get plan ingredients
+            const ingredients = await storage.getFeedPlanIngredients(plan.id);
+            
+            const ingredientsUsed = await Promise.all(
+              ingredients.map(async (ing) => {
+                const dailyAmount = (dailyTotal * parseFloat(ing.percentage)) / 100;
+                
+                // Update consumed amount
+                await storage.updateIngredientConsumed(ing.id, dailyAmount);
+                
+                // Update inventory lock
+                await storage.deductFromInventoryLock(ing.inventoryItemId, plan.id, dailyAmount);
+                
+                return {
+                  itemId: ing.inventoryItemId,
+                  quantity: dailyAmount
+                };
+              })
+            );
+
+            // Log execution
+            await storage.createFeedExecutionLog({
+              feedPlanId: plan.id,
+              executionDate: today,
+              quantityDeducted: dailyTotal.toString(),
+              ingredientsUsed,
+              status: 'success',
+              notes: 'Automated daily execution'
+            });
+
+            // Check if plan should be completed
+            if (today >= endDate) {
+              await storage.completeFeedPlan(plan.id);
+              
+              // Create completion alert
+              await storage.createAlert({
+                userId: plan.ownerId,
+                type: 'info',
+                title: 'Feed Plan Completed',
+                description: `Feed plan "${plan.name}" has been completed.`,
+                isRead: false,
+                actionRequired: false
+              });
+            }
+
+            return { planId: plan.id, status: 'success', quantityDeducted: dailyTotal };
+          } catch (error: any) {
+            console.error(`Error executing plan ${plan.id}:`, error);
+            return { planId: plan.id, status: 'failed', error: error.message };
+          }
+        })
+      );
+
+      res.json({ 
+        message: 'Daily execution completed', 
+        results,
+        date: today.toISOString() 
+      });
+    } catch (error) {
+      console.error('Daily execution error:', error);
+      res.status(500).json({ error: 'Failed to execute daily feed deduction' });
+    }
+  });
+
+  // Get feed execution history
+  app.get("/api/feed-plans/:id/execution-log", authenticateToken, async (req: any, res) => {
+    try {
+      const logs = await storage.getFeedExecutionLogs(req.params.id);
+      res.json(logs);
+    } catch (error) {
+      console.error('Execution log fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch execution logs' });
+    }
+  });
+
+  // Get inventory alerts (low stock, locked items, etc.)
+  app.get("/api/inventory/alerts", authenticateToken, async (req: any, res) => {
+    try {
+      const items = await storage.getInventoryItems(req.user.userId);
+      const alerts = items
+        .filter(item => {
+          const available = parseFloat(item.availableQuantity);
+          const reorderLevel = item.reorderLevel ? parseFloat(item.reorderLevel) : 0;
+          return available <= reorderLevel;
+        })
+        .map(item => ({
+          itemId: item.id,
+          itemName: item.name,
+          available: item.availableQuantity,
+          reorderLevel: item.reorderLevel,
+          severity: parseFloat(item.availableQuantity) === 0 ? 'critical' : 'warning'
+        }));
+      
+      res.json(alerts);
+    } catch (error) {
+      console.error('Inventory alerts fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch inventory alerts' });
     }
   });
 

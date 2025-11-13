@@ -140,6 +140,88 @@ export const alerts = pgTable("alerts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Cattle groups for managing multiple cattle together
+export const cattleGroups = pgTable("cattle_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  cattleIds: json("cattle_ids").notNull().$type<string[]>(), // Array of cattle IDs
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Inventory items for feed ingredients
+export const inventoryItems = pgTable("inventory_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // grain, protein, mineral, fodder, supplement
+  unit: text("unit").notNull(), // kg, liters, bags
+  totalQuantity: decimal("total_quantity", { precision: 10, scale: 2 }).notNull(),
+  availableQuantity: decimal("available_quantity", { precision: 10, scale: 2 }).notNull(),
+  lockedQuantity: decimal("locked_quantity", { precision: 10, scale: 2 }).default('0'),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }),
+  reorderLevel: decimal("reorder_level", { precision: 10, scale: 2 }),
+  supplier: text("supplier"),
+  location: text("location"),
+  expiryDate: timestamp("expiry_date"),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Feed plans for managing feeding schedules
+export const feedPlans = pgTable("feed_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  cattleGroupId: varchar("cattle_group_id").references(() => cattleGroups.id),
+  cattleId: varchar("cattle_id").references(() => cattle.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  dailyRationPerAnimal: decimal("daily_ration_per_animal", { precision: 8, scale: 2 }).notNull(), // kg per animal per day
+  totalAnimals: integer("total_animals").notNull(),
+  status: text("status").notNull().default('active'), // active, completed, cancelled
+  notes: text("notes"),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Feed plan ingredients - composition of each feed plan
+export const feedPlanIngredients = pgTable("feed_plan_ingredients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  feedPlanId: varchar("feed_plan_id").references(() => feedPlans.id).notNull(),
+  inventoryItemId: varchar("inventory_item_id").references(() => inventoryItems.id).notNull(),
+  percentage: decimal("percentage", { precision: 5, scale: 2 }).notNull(), // 0-100
+  totalRequired: decimal("total_required", { precision: 10, scale: 2 }).notNull(), // Auto-calculated
+  consumed: decimal("consumed", { precision: 10, scale: 2 }).default('0'),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Inventory locks to track locked quantities for feed plans
+export const inventoryLocks = pgTable("inventory_locks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  inventoryItemId: varchar("inventory_item_id").references(() => inventoryItems.id).notNull(),
+  feedPlanId: varchar("feed_plan_id").references(() => feedPlans.id).notNull(),
+  lockedQuantity: decimal("locked_quantity", { precision: 10, scale: 2 }).notNull(),
+  remainingQuantity: decimal("remaining_quantity", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").notNull().default('locked'), // locked, released, consumed
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Feed execution log for tracking daily deductions
+export const feedExecutionLog = pgTable("feed_execution_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  feedPlanId: varchar("feed_plan_id").references(() => feedPlans.id).notNull(),
+  executionDate: timestamp("execution_date").notNull(),
+  quantityDeducted: decimal("quantity_deducted", { precision: 10, scale: 2 }).notNull(),
+  ingredientsUsed: json("ingredients_used").notNull().$type<Array<{ itemId: string; quantity: number }>>(),
+  status: text("status").notNull(), // success, failed, partial
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Schema exports for validation
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -190,6 +272,40 @@ export const insertAlertSchema = createInsertSchema(alerts).omit({
   createdAt: true,
 });
 
+export const insertCattleGroupSchema = createInsertSchema(cattleGroups).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertInventoryItemSchema = createInsertSchema(inventoryItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFeedPlanSchema = createInsertSchema(feedPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFeedPlanIngredientSchema = createInsertSchema(feedPlanIngredients).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInventoryLockSchema = createInsertSchema(inventoryLocks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFeedExecutionLogSchema = createInsertSchema(feedExecutionLog).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -209,3 +325,15 @@ export type InsertSalesTransaction = z.infer<typeof insertSalesTransactionSchema
 export type SalesTransaction = typeof salesTransactions.$inferSelect;
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type Alert = typeof alerts.$inferSelect;
+export type InsertCattleGroup = z.infer<typeof insertCattleGroupSchema>;
+export type CattleGroup = typeof cattleGroups.$inferSelect;
+export type InsertInventoryItem = z.infer<typeof insertInventoryItemSchema>;
+export type InventoryItem = typeof inventoryItems.$inferSelect;
+export type InsertFeedPlan = z.infer<typeof insertFeedPlanSchema>;
+export type FeedPlan = typeof feedPlans.$inferSelect;
+export type InsertFeedPlanIngredient = z.infer<typeof insertFeedPlanIngredientSchema>;
+export type FeedPlanIngredient = typeof feedPlanIngredients.$inferSelect;
+export type InsertInventoryLock = z.infer<typeof insertInventoryLockSchema>;
+export type InventoryLock = typeof inventoryLocks.$inferSelect;
+export type InsertFeedExecutionLog = z.infer<typeof insertFeedExecutionLogSchema>;
+export type FeedExecutionLog = typeof feedExecutionLog.$inferSelect;

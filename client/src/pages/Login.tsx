@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +45,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const { t, language, setLanguage } = useLanguage();
+  const [, setLocation] = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,8 +56,14 @@ export default function Login() {
     
     try {
       await login(email, password, selectedRole);
+      console.log('Login successful, redirecting...');
+      // Small delay to ensure state updates
+      setTimeout(() => {
+        setLocation('/dashboard');
+      }, 100);
     } catch (error) {
       console.error('Login failed:', error);
+      alert('Login failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }

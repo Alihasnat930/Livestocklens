@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { useLanguage } from '@/context/LanguageContext';
+import FeedPlanForm from '@/components/FeedPlanForm';
+import FeedPlanMonitoring from '@/components/FeedPlanMonitoring';
+import InventoryManagement from '@/components/InventoryManagement';
 import { 
   Calendar as CalendarIcon, 
   Plus, 
@@ -169,20 +172,46 @@ export default function FeedingVaccination() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} data-testid="tabs-feeding-vaccination">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="feeding" data-testid="tab-feeding">
             <CalendarIcon className="h-4 w-4 mr-2" />
             Feeding Schedule
+          </TabsTrigger>
+          <TabsTrigger value="feed-plans" data-testid="tab-feed-plans">
+            <Activity className="h-4 w-4 mr-2" />
+            Feed Plans
+          </TabsTrigger>
+          <TabsTrigger value="inventory" data-testid="tab-inventory">
+            <Plus className="h-4 w-4 mr-2" />
+            Inventory
+          </TabsTrigger>
+          <TabsTrigger value="create-plan" data-testid="tab-create-plan">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Plan
           </TabsTrigger>
           <TabsTrigger value="vaccination" data-testid="tab-vaccination">
             <Activity className="h-4 w-4 mr-2" />
             Vaccination
           </TabsTrigger>
-          <TabsTrigger value="inventory" data-testid="tab-inventory">
-            <Plus className="h-4 w-4 mr-2" />
-            Feed Inventory
-          </TabsTrigger>
         </TabsList>
+
+        {/* Feed Plans Monitoring Tab */}
+        <TabsContent value="feed-plans" className="space-y-6">
+          <FeedPlanMonitoring />
+        </TabsContent>
+
+        {/* Inventory Management Tab */}
+        <TabsContent value="inventory" className="space-y-6">
+          <InventoryManagement />
+        </TabsContent>
+
+        {/* Create Feed Plan Tab */}
+        <TabsContent value="create-plan" className="space-y-6">
+          <FeedPlanForm 
+            onSuccess={() => setActiveTab('feed-plans')}
+            onCancel={() => setActiveTab('feed-plans')}
+          />
+        </TabsContent>
 
         <TabsContent value="feeding" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
