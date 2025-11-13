@@ -12,6 +12,7 @@ Your LivestockLens application has been completely configured to run locally on 
 4. **Environment Variables**: Created proper .env configuration
 5. **Authentication System**: Implemented development mode with test users
 6. **Proxy Configuration**: Set up Vite proxy to communicate with backend API
+7. **🔗 Blockchain Integration**: Polygon (Matic) Amoy Testnet for immutable record-keeping
 
 ## 🚀 How to Run the Application
 
@@ -140,10 +141,22 @@ For production or full development with persistent data:
 - Drizzle ORM for database operations
 - JWT for authentication
 - Multer for file uploads
+- **ethers.js v6** for blockchain integration
 
 ### Database
 - PostgreSQL with Drizzle ORM
 - Development mode with mock data
+
+### Blockchain
+- **Polygon (Matic) Amoy Testnet**
+- Smart Contract: CattleRegistry
+- Immutable record-keeping for:
+  - Cattle registration
+  - Vaccination history
+  - Ownership transfers
+  - Heritage tracking
+
+📖 **See [BLOCKCHAIN_INTEGRATION.md](./BLOCKCHAIN_INTEGRATION.md) for detailed documentation**
 
 ## Troubleshooting
 

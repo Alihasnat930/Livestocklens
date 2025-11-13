@@ -28,6 +28,10 @@ export const cattle = pgTable("cattle", {
   healthStatus: text("health_status").notNull().default('healthy'), // healthy, sick, critical
   photo: text("photo"),
   ownerId: varchar("owner_id").references(() => users.id),
+  // Blockchain integration fields
+  blockchainTxHash: text("blockchain_tx_hash"), // Transaction hash from blockchain registration
+  blockchainRegistered: boolean("blockchain_registered").default(false),
+  ownerCNIC: text("owner_cnic"), // National ID for blockchain ownership tracking
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -57,6 +61,8 @@ export const vaccinations = pgTable("vaccinations", {
   veterinarianId: varchar("veterinarian_id").references(() => users.id),
   nextDueDate: timestamp("next_due_date"),
   notes: text("notes"),
+  // Blockchain integration
+  blockchainTxHash: text("blockchain_tx_hash"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
