@@ -50,10 +50,12 @@ The application includes built-in test users for development:
 | Email | Password | Role |
 |-------|----------|------|
 | farmer@test.com | test123 | farmer |
-| vet@test.com | test123 | veterinarian |
 | buyer@test.com | test123 | buyer |
 | admin@test.com | test123 | admin |
    - Backend API: http://localhost:5000
+| vet@test.com | | veterinarian |
+| buyer@test.com | | buyer |
+| admin@test.com | | admin |
 
 ### Development Mode Authentication
 
